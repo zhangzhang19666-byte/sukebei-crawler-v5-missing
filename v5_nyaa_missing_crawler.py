@@ -220,24 +220,8 @@ async def run_v5_missing_mode(missing_dir, workers, batch_size, batch_timeout,
             for _ in range(workers):
                 q.put_nowait(None)
             
-            # 超时控制
-            max_checks = max(1, batch_timeout // 5)
-            for _ in range(max_checks):
-                if stop_flag:
-                    break
-                try:
-                    await asyncio.wait_for(q.join(), timeout=5)
-                    break
-                except asyncio.TimeoutError:
-                    continue
-            else:
-                print(f" [v5] BATCH TIMEOUT ({batch_timeout}s)")
-                stop_flag = True
-                while not q.empty():
-                    try:
-                        q.get_nowait()
-                    except asyncio.QueueEmpty:
-                        break
+            # 等待所有任务完成（直到队列为空）
+            await q.join()
             
             await asyncio.gather(*workers_tasks, return_exceptions=True)
     finally:
