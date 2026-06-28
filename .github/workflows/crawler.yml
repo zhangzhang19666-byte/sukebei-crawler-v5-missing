@@ -1,19 +1,19 @@
-name: V5 Daily Update + Crawler
+name: Sukebei Missing Crawler
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 2 * * *'   # 每天 UTC 2:00（北京时间10:00）
+  push:
+    branches: [master]
 
 permissions:
   contents: write
   actions: write
 
 jobs:
-  daily:
+  crawl:
     runs-on: ubuntu-latest
     concurrency:
-      group: v5-crawler-loop
+      group: crawler-loop
       cancel-in-progress: false
 
     steps:
@@ -25,41 +25,32 @@ jobs:
         with:
           python-version: '3.11'
 
-      - run: pip install curl_cffi beautifulsoup4 requests
+      - run: pip install curl_cffi beautifulsoup4 lxml
 
-      # ── 第1步：检测新ID ──
-      - id: check_new
-        run: |
-          python3 daily_update.py
-
-      # ── 第2步：如果有新ID，跑爬虫 ──
-      - if: steps.check_new.outputs.has_new == 'true'
-        run: |
+      # ── 跑爬虫 ──
+      - run: |
           python3 v5_nyaa_missing_crawler.py \
             --missing-dir=. \
             --workers=5 \
             --batch-size=1100 \
             --batch-timeout=900
 
-      # ── 第3步：提交结果 ──
-      - if: steps.check_new.outputs.has_new == 'true'
-        run: |
+      # ── 提交结果 ──
+      - run: |
           git config user.email "bot@users.noreply.github.com"
           git config user.name "bot"
-          git add crawler_state.json missing_daily_*.txt nyaa_v5_missing_*.jsonl || true
-          git diff --staged --quiet || git commit -m "auto: daily update - new IDs up to ${{ steps.check_new.outputs.site_max }}"
+          git add -A
+          git diff --staged --quiet || git commit -m "auto: crawl results"
           git push
 
-      # ── 第4步：如果一批没跑完，自触发 ──
-      - if: steps.check_new.outputs.has_new == 'true'
-        env:
+      # ── 如果还有剩余ID，自触发 ──
+      - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 check_remaining.py
-          if [ "$(python3 check_remaining.py)" = "true" ]; then
+          if python3 check_remaining.py 2>/dev/null | grep -q true; then
             echo "还有剩余ID，60秒后触发下一批..."
             sleep 60
-            gh workflow run "V5 Daily Update + Crawler" --ref main
+            gh workflow run "Sukebei Missing Crawler" --ref master
           else
             echo "✅ 全部ID已消费完"
           fi

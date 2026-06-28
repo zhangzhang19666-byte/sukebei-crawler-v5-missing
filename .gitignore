@@ -1,0 +1,8 @@
+# 旧数据文件 — not needed for sukebei fork
+missing_002.txt
+missing_daily_*.txt
+crawler_state.json
+
+# Python
+__pycache__/
+*.pyc
